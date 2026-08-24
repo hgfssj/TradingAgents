@@ -1,5 +1,6 @@
 import functools
 import logging
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -99,7 +100,11 @@ def resolve_instrument_identity(ticker: str) -> dict:
         info = yf.Ticker(normalize_symbol(ticker)).info or {}
     except Exception as exc:  # noqa: BLE001 — fail open, never block the run
         logger.debug("Could not resolve instrument identity for %s: %s", ticker, exc)
-        return {}
+        info = {}
+    if not info and re.match(r"^\d{6}\.(SS|SZ)$", str(ticker), re.IGNORECASE):
+        # Yahoo is geo-blocked for CN networks; resolve CN tickers via Eastmoney.
+        from tradingagents.dataflows.eastmoney import resolve_identity_em
+        return resolve_identity_em(str(ticker))
 
     identity: dict[str, str] = {}
     company_name = _clean_identity_value(info.get("longName")) or _clean_identity_value(

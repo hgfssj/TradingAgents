@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import time
 from typing import Annotated
 
@@ -192,15 +193,21 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             data = cached
 
     if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        downloaded = _ensure_date_column(downloaded.reset_index())
+        if re.match(r"^\d{6}\.(SS|SZ)$", canonical, re.IGNORECASE):
+            # CN A-shares: Yahoo's public endpoints are geo-blocked for many
+            # CN networks; route to the Eastmoney vendor instead.
+            from .eastmoney import download_ohlcv_em
+            downloaded = download_ohlcv_em(canonical, start_str, end_str)
+        else:
+            downloaded = yf_retry(lambda: yf.download(
+                canonical,
+                start=start_str,
+                end=end_str,
+                multi_level_index=False,
+                progress=False,
+                auto_adjust=True,
+            ))
+            downloaded = _ensure_date_column(downloaded.reset_index())
         # Only cache real data — never persist an empty frame.
         if downloaded.empty or "Close" not in downloaded.columns:
             raise NoMarketDataError(

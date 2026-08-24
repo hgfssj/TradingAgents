@@ -162,6 +162,30 @@ class MinimaxChatOpenAI(NormalizedChatOpenAI):
         return payload
 
 
+class OllamaChatOpenAI(NormalizedChatOpenAI):
+    """Ollama-specific overrides on top of the OpenAI-compatible client.
+
+    Qwen3-family models default to thinking mode; Ollama's /v1/chat/completions
+    endpoint does not forward the ``think`` flag (only the native /api/chat
+    honours it), so the whole max_tokens budget is spent on reasoning and
+    ``content`` comes back empty, breaking every downstream parser. The
+    model-level ``/no_think`` directive achieves the same through the system
+    message, which /v1 does forward.
+    """
+
+    def _get_request_payload(self, input_, *, stop=None, **kwargs):
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        messages = payload.get("messages") or []
+        for msg in messages:
+            if msg.get("role") == "system":
+                content = msg.get("content")
+                if isinstance(content, str) and "/no_think" not in content:
+                    msg["content"] = "/no_think " + content
+                return payload
+        messages.insert(0, {"role": "system", "content": "/no_think"})
+        return payload
+
+
 # Kwargs forwarded from user config to ChatOpenAI
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "reasoning_effort", "temperature",
@@ -225,7 +249,8 @@ OPENAI_COMPATIBLE_PROVIDERS: dict[str, ProviderSpec] = {
     "groq":       ProviderSpec(base_url="https://api.groq.com/openai/v1"),
     "nvidia":     ProviderSpec(base_url="https://integrate.api.nvidia.com/v1"),
     "ollama":     ProviderSpec(base_url="http://localhost:11434/v1", base_url_env="OLLAMA_BASE_URL",
-                               key_optional=True, placeholder_key="ollama"),
+                               key_optional=True, placeholder_key="ollama",
+                               chat_class=OllamaChatOpenAI),
     # Generic endpoint: user supplies base_url; key optional (keyless local).
     "openai_compatible": ProviderSpec(
         require_base_url=True, key_optional=True, chat_class=LocalCompatibleChatOpenAI
