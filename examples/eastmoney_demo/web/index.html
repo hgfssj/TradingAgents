@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TradingAgents 控制台</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #30363d;
+    --text: #e6edf3; --dim: #8b949e; --blue: #58a6ff; --green: #3fb950;
+    --yellow: #d29922; --red: #f85149; --purple: #d2a8ff; --orange: #f0883e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  header h1 { font-size: 17px; font-weight: 600; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  .layout { display: flex; gap: 14px; padding: 14px 20px; align-items: flex-start; }
+  .col-main { flex: 1.6; min-width: 0; }
+  .col-side { flex: 1; min-width: 320px; max-width: 460px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 14px; overflow: hidden;
+  }
+  .panel > h2 {
+    font-size: 13px; font-weight: 600; padding: 10px 14px;
+    border-bottom: 1px solid var(--border); background: var(--panel2);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .panel .body { padding: 12px 14px; }
+
+  /* ---- pipeline nodes ---- */
+  .nodes { display: flex; flex-direction: column; gap: 6px; }
+  .node {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel2); font-size: 13px;
+  }
+  .node .dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    background: var(--dim);
+  }
+  .node .name { flex: 1; }
+  .node .tag {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; color: var(--dim);
+    background: rgba(139,148,158,.12); border: 1px solid var(--border);
+  }
+  .node.pending { opacity: .55; }
+  .node.running { border-color: var(--blue); background: rgba(88,166,255,.08); }
+  .node.running .dot { background: var(--blue); animation: pulse 1.2s infinite; }
+  .node.running .tag { color: var(--blue); border-color: var(--blue); }
+  .node.completed .dot { background: var(--green); }
+  .node.completed .tag { color: var(--green); border-color: var(--green); }
+  .node.error .dot { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+  /* ---- log console ---- */
+  .console {
+    font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px;
+    height: 340px; overflow-y: auto; padding: 10px 12px;
+    background: #0a0d12; line-height: 1.7;
+  }
+  .console .ln { white-space: pre-wrap; word-break: break-all; }
+  .console .t { color: #484f58; margin-right: 8px; }
+  .console .sys { color: var(--dim); }
+  .console .node { color: var(--blue); }
+  .console .tool { color: var(--purple); }
+  .console .err { color: var(--red); }
+
+  /* ---- form ---- */
+  .form-row { margin-bottom: 10px; }
+  .form-row label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .form-row input, .form-row select {
+    width: 100%; padding: 8px 10px; border-radius: 6px;
+    background: var(--panel2); border: 1px solid var(--border);
+    color: var(--text); font-size: 13px; outline: none;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--blue); }
+  .form-grid { display: flex; gap: 10px; }
+  .form-grid .form-row { flex: 1; }
+  .btn {
+    width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: #238636; color: #fff; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { background: #2ea043; }
+  .btn:disabled { background: var(--panel2); color: var(--dim); cursor: not-allowed; }
+  .btn.stop { background: var(--panel2); color: var(--red); border-color: var(--red); }
+
+  /* ---- stats ---- */
+  .stats { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stat {
+    flex: 1; min-width: 100px; text-align: center; padding: 10px 8px;
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .stat .v { font-size: 18px; font-weight: 700; font-family: Menlo, monospace; }
+  .stat .k { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+  /* ---- result ---- */
+  .decision {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 26px; font-weight: 800; padding: 18px;
+  }
+  .decision .badge { padding: 6px 22px; border-radius: 8px; }
+  .badge.buy { color: #fff; background: var(--red); }
+  .badge.sell { color: #fff; background: var(--green); }
+  .badge.hold { color: #1c2128; background: var(--yellow); }
+  .result-links { text-align: center; padding-bottom: 14px; }
+  .result-links a { color: var(--blue); font-size: 13px; margin: 0 8px; }
+
+  /* ---- history ---- */
+  .hist-item {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer;
+  }
+  .hist-item:hover { background: var(--panel2); }
+  .hist-item .id { font-family: Menlo, monospace; color: var(--blue); }
+  .hist-item .cnt { color: var(--dim); margin-left: auto; }
+  .empty { color: var(--dim); font-size: 12px; text-align: center; padding: 14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TradingAgents 控制台</h1>
+  <span class="sub">本机 Ollama (qwen3:8b) + 东方财富 A 股数据 · 多智能体分析流水线</span>
+</header>
+
+<div class="layout">
+  <div class="col-main">
+    <div class="panel">
+      <h2>流水线节点 <span class="sub" id="pipe-status">待命</span></h2>
+      <div class="body"><div class="nodes" id="nodes"></div></div>
+    </div>
+    <div class="panel">
+      <h2>运行日志</h2>
+      <div class="console" id="console"></div>
+    </div>
+  </div>
+
+  <div class="col-side">
+    <div class="panel">
+      <h2>新建分析任务</h2>
+      <div class="body">
+        <div class="form-row">
+          <label>A 股代码（如 600519.SS）</label>
+          <input id="f-ticker" list="tickers" value="600519.SS" placeholder="600519.SS">
+          <datalist id="tickers">
+            <option value="600519.SS">贵州茅台</option>
+            <option value="000858.SZ">五粮液</option>
+            <option value="000001.SZ">平安银行</option>
+            <option value="601318.SS">中国平安</option>
+            <option value="300750.SZ">宁德时代</option>
+            <option value="600036.SS">招商银行</option>
+          </datalist>
+        </div>
+        <div class="form-row">
+          <label>分析日期（交易数据截至日）</label>
+          <input id="f-date" type="date">
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label>辩论轮数</label>
+            <select id="f-rounds">
+              <option value="1" selected>1 轮（快）</option>
+              <option value="2">2 轮</option>
+              <option value="3">3 轮（慢）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>报告语言</label>
+            <select id="f-lang">
+              <option value="Chinese" selected>中文</option>
+              <option value="English">English</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" id="btn-run">启动分析</button>
+      </div>
+    </div>
+
+    <div class="panel" id="result-panel" style="display:none">
+      <h2>分析结果</h2>
+      <div class="decision"><span class="badge" id="r-decision"></span></div>
+      <div class="result-links">
+        <a id="r-report" target="_blank">查看完整报告</a>
+        <a id="r-files" target="_blank">报告文件树</a>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>运行统计 <span class="sub" id="elapsed"></span></h2>
+      <div class="body"><div class="stats">
+        <div class="stat"><div class="v" id="s-llm">0</div><div class="k">LLM 调用</div></div>
+        <div class="stat"><div class="v" id="s-tool">0</div><div class="k">工具调用</div></div>
+        <div class="stat"><div class="v" id="s-in">0</div><div class="k">输入 tokens</div></div>
+        <div class="stat"><div class="v" id="s-out">0</div><div class="k">输出 tokens</div></div>
+      </div></div>
+    </div>
+
+    <div class="panel">
+      <h2>历史任务</h2>
+      <div id="history"><div class="empty">加载中…</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const consoleEl = $("console");
+let nodesOrder = [], nodesLabels = {};
+let pollTimer = null, logSeq = 0, activeTaskId = null;
+
+function fmt(v) { return v.toLocaleString(); }
+
+function appendLog(t, level, text) {
+  const div = document.createElement("div");
+  div.className = "ln " + level;
+  div.innerHTML = '<span class="t">' + t + '</span>' + escapeHtml(text);
+  consoleEl.appendChild(div);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function initNodes() {
+  const res = await fetch("/api/nodes");
+  const data = await res.json();
+  nodesOrder = data.order; nodesLabels = data.labels;
+  renderNodes({});
+}
+function renderNodes(states) {
+  const el = $("nodes"); el.innerHTML = "";
+  for (const n of nodesOrder) {
+    const st = states[n] || "pending";
+    const div = document.createElement("div");
+    div.className = "node " + st;
+    const tag = { pending: "等待", running: "运行中", completed: "完成", error: "失败" }[st] || st;
+    div.innerHTML = '<span class="dot"></span><span class="name">' + nodesLabels[n] +
+      '</span><span class="tag">' + tag + '</span>';
+    el.appendChild(div);
+  }
+}
+
+async function refreshHistory() {
+  try {
+    const res = await fetch("/api/reports");
+    const data = await res.json();
+    const el = $("history"); el.innerHTML = "";
+    if (!data.runs.length) {
+      el.innerHTML = '<div class="empty">暂无历史任务</div>'; return;
+    }
+    for (const r of data.runs) {
+      const d = new Date(parseInt(r.task_id));
+      const div = document.createElement("div");
+      div.className = "hist-item";
+      div.innerHTML = '<span class="id">' + d.toLocaleString() + '</span>' +
+        '<span class="cnt">' + r.files + ' 份报告</span>';
+      div.onclick = () => window.open("/reports/", "_blank");
+      el.appendChild(div);
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function poll(taskId) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch("/api/tasks/" + taskId + "?since=" + logSeq);
+      if (!res.ok) return;
+      const snap = await res.json();
+      renderNodes(snap.node_states);
+      $("s-llm").textContent = fmt(snap.stats.llm_calls);
+      $("s-tool").textContent = fmt(snap.stats.tool_calls);
+      $("s-in").textContent = fmt(snap.stats.tokens_in);
+      $("s-out").textContent = fmt(snap.stats.tokens_out);
+      $("elapsed").textContent = snap.elapsed ? "耗时 " + snap.elapsed + "s" : "";
+      for (const l of snap.logs) {
+        logSeq = l.seq;
+        appendLog(l.t, l.level, l.text);
+      }
+      const running = Object.values(snap.node_states).filter(s => s === "running").length;
+      $("pipe-status").textContent =
+        snap.status === "running" ? "运行中…" : (snap.status === "done" ? "完成" :
+        snap.status === "error" ? "出错" : "排队中");
+      if (snap.status === "done" || snap.status === "error") {
+        clearInterval(pollTimer); pollTimer = null;
+        $("btn-run").disabled = false;
+        if (snap.status === "error") {
+          appendLog("", "err", "任务失败: " + (snap.error || "未知错误"));
+        } else {
+          const panel = $("result-panel"); panel.style.display = "";
+          const badge = $("r-decision");
+          badge.textContent = snap.decision || "—";
+          badge.className = "badge " + (snap.decision || "").toLowerCase();
+          $("r-report").href = "/reports/";
+          $("r-files").href = "/reports/";
+        }
+        refreshHistory();
+      }
+    } catch (e) { /* transient */ }
+  }, 1500);
+}
+
+$("btn-run").addEventListener("click", async () => {
+  const ticker = $("f-ticker").value.trim().toUpperCase();
+  const date = $("f-date").value;
+  if (!/^\d{6}\.(SS|SZ)$/.test(ticker)) { alert("请输入 A 股代码，如 600519.SS"); return; }
+  if (!date) { alert("请选择分析日期"); return; }
+  $("btn-run").disabled = true;
+  $("result-panel").style.display = "none";
+  consoleEl.innerHTML = ""; logSeq = 0;
+  renderNodes({});
+  const overrides = {
+    max_debate_rounds: parseInt($("f-rounds").value),
+    output_language: $("f-lang").value,
+  };
+  try {
+    const res = await fetch("/api/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker, date, overrides }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      appendLog("", "err", "启动失败: " + (err.detail || res.statusText));
+      $("btn-run").disabled = false; return;
+    }
+    const data = await res.json();
+    activeTaskId = data.task_id;
+    poll(data.task_id);
+  } catch (e) {
+    appendLog("", "err", "无法连接后端: " + e);
+    $("btn-run").disabled = false;
+  }
+});
+
+// default date = most recent weekday (markets are closed on weekends)
+(function setDefaultDate() {
+  let d = new Date();
+  const day = d.getDay();
+  if (day === 0) d.setDate(d.getDate() - 2);
+  else if (day === 6) d.setDate(d.getDate() - 1);
+  $("f-date").value = d.toISOString().slice(0, 10);
+})();
+
+initNodes();
+refreshHistory();
+</script>
+</body>
+</html>
